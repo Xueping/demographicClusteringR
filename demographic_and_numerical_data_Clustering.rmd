@@ -17,8 +17,8 @@ Load Data including header and row names:
 
 ```{r load_data, echo=FALSE}
 
-rawData = read.csv(file = "/home/xuepeng/data/DoH/demographic/demo.csv",header = T)
-disease = read.csv(file = "/home/xuepeng/data/DoH/demographic_TopDisease/topDisease.csv",header = T)
+rawData = read.csv(file = "demo.csv",header = T)
+disease = read.csv(file = "topDisease.csv",header = T)
 raw_disease = merge(rawData,disease,by = "subject_id", all.x = T)
 
 demo = raw_disease[,c(4,6,8,10,14,15,16,17,18)]
@@ -61,14 +61,14 @@ Hierarchical and medoid Clusterings are chosen to calculate the data relationshi
 
 
 ```{r Clustering, echo = FALSE}
-filePath = "/home/xuepeng/data/DoH/demographic_TopDisease/"
+filePath = "clusters/"
 
 hc = hclust(dist,method = "ward.D")
 plot(hc)
 
 mydb = dbConnect(MySQL(), user='root', password='passwd', dbname='doh', host='qcis4')
 
-for(i in 16:20){
+for(i in 6:6){
   
   hc_clusters = cutree(hc,i)
   data_hc = cbind(raw_disease,hc_clusters)

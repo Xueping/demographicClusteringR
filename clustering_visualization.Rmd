@@ -1,0 +1,151 @@
+---
+title: "clustering_visualizaion"
+author: "Xueping Peng"
+date: "05/07/2016"
+output: html_document
+---
+
+
+```{r, echo=FALSE}
+library(ggplot2)
+library(cluster)
+library(fpc)
+library(rgdal)
+library(maptools)
+library(plyr)
+library(rgeos)
+```
+
+
+```{r, echo=FALSE}
+
+cluster6 = read.csv(file = "clusters/cluster_6.csv",header = T,row.names=1)
+
+
+mydb = dbConnect(MySQL(), user='root', password='passwd', dbname='doh', host='qcis4')
+rs = dbSendQuery(mydb, "select * from cluster_16")
+cluster9 = fetch(rs,n=-1)
+
+pp= ggplot(data=cluster9, 
+         aes(x="SEX",
+         fill = sex)) + 
+  theme(legend.position="top",
+              axis.text=element_text(size = 6))+
+       geom_bar(width = 1)+
+  coord_polar(theta="y")
+pp=pp+facet_wrap( ~ hc_clusters)
+pp
+
+pp= ggplot(data=cluster9, 
+         aes(x="Type",
+         fill = admission_type_descr)) + 
+       geom_bar(width = 1)+
+  theme(legend.position="top",
+              axis.text=element_text(size = 6))+
+  coord_polar("y")
+pp=pp+facet_wrap(~ hc_clusters)
+pp
+
+
+more1000 = as.integer(which(table(cluster9$top_level_code)>1000))
+
+for(i in 1:length(cluster9$top_level_code)){
+  if(!is.element(cluster9$top_level_code[i],more1000))
+    {
+      cluster9$top_level_code[i]="other"
+    }
+}
+
+pp= ggplot(data=cluster9, 
+         aes(x="Disease",
+         fill = top_level_code)) + 
+  theme(legend.position="top",
+              axis.text=element_text(size = 6))+
+       geom_bar(width = 1)+
+  coord_polar(theta="y")
+pp=pp+facet_wrap( ~ hc_clusters)
+pp
+
+pp= ggplot(data=cluster9, 
+         aes(x="Disease",
+         fill = top_level_code)) + 
+  theme(legend.position="top",
+              axis.text=element_text(size = 6))+
+       geom_bar(width = 1)+
+  coord_polar(theta="y")
+pp=pp+facet_wrap( ~ medoid_cluster)
+pp
+
+table(cluster9$hc_clusters)
+
+
+setwd("/home/xuepeng/data/DoH/demographic/geo_au")
+australia = readOGR(dsn=".", layer="COM20111216_ELB_region")
+australia@data$id = rownames(australia@data)
+australia.buffered = gBuffer(australia, width=0, byid=TRUE)
+australia.points = fortify(australia.buffered, region="id")
+australia.df = merge(australia.points, australia@data, by="id", all.x = TRUE)
+
+zipcodes <- read.csv('/home/xuepeng/data/DoH/demographic/geo_au/pc_full_lat_long.csv', header = T)
+zipcodes <- zipcodes[!duplicated(zipcodes$postcode),]
+zipcodes <- zipcodes[!zipcodes$latitude == 0,]
+zipcodes <- zipcodes[!zipcodes$longitude == 0,]
+
+postcode = zipcodes[sample(nrow(zipcodes),replace = TRUE,size = 32074),"postcode"]
+cluster6 = cbind(cluster6,postcode)
+cluster_geocode = merge(cluster6, zipcodes, by="postcode", all.x = TRUE)
+
+
+ggplot() +
+  geom_polygon(data=australia.df,size=6, aes(long,lat,group=group)) +
+  geom_path(data=australia.df, aes(long,lat,group=group), color="grey") +
+  geom_point(data=cluster_geocode, aes(x=longitude, y=latitude, colour=sex)) +
+  scale_size(range = c(1,20), name = "Population") +
+  theme(legend.position="top",axis.text=element_text(size = 6), legend.title=element_blank())+
+  coord_equal(xlim=c(110,155))+facet_wrap(~ hc_clusters,nrow = 3)
+
+ggplot() +
+  geom_path(data=australia.df, aes(long,lat,group=group), color="grey") +
+  geom_point(data=cluster_geocode, aes(x=longitude, y=latitude, colour=sex)) +
+  theme(legend.position="top",axis.text=element_text(size = 6), legend.title=element_blank())+
+  coord_cartesian(xlim=c(110,155))+facet_wrap(~ hc_clusters,nrow = 3)
+
+
+```
+
+
+```{r ggmap}
+install.packages("ggmap")
+require(ggmap)
+map = get_map(location = "Australia",zoom = 4)
+mapPoints <- ggmap(map)+geom_point(aes(x = longitude, y = latitude), data = cluster_geocode, alpha = .5)+facet_wrap(~ hc_clusters,nrow = 3)
+mapPoints
+
+```
+
+```{r rworldmap}
+install.packages("rworldmap")
+require(rworldmap)
+map <- getMap(resolution = "low")
+#par(mfrow=c(6,1),mar=c(1,1,1,1))
+for(i in unique(cluster_geocode$hc_clusters)){
+  subData = subset(cluster_geocode,hc_clusters==i)
+  plot(newmap, xlim = c(115, 155), ylim = c(-45, -11), asp = 1)
+  points(subData$longitude, subData$latitude, col = subData$sex, cex = .6)
+}
+#plot(newmap, xlim = c(115, 155), ylim = c(-45, -11), asp = 1)
+#points(cluster_geocode$longitude, cluster_geocode$latitude, col = cluster_geocode$hc_clusters, cex = .6)
+#points(zipcodes$longitude, zipcodes$latitude, col = "red", cex = .6)
+
+```
+
+```{r pie}
+par(mfrow=c(2,3),mar=c(1,1,1,1))
+for(i in 1:6){
+  subData = subset(cluster_geocode,hc_clusters==i)
+  sumSex = table(subData$sex)
+  main = paste("Cluster ",i,",Total:", sum(sumSex),sep = "")
+  pie(sumSex,main = main)
+}
+
+```
