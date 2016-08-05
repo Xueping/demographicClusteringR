@@ -1,0 +1,90 @@
+---
+title: "Demographic and Numerical Data Clustering"
+author: "xp"
+date: "5 August 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(Matrix)
+library(cluster)
+library(fpc)
+library(RMySQL)
+```
+
+Load Data including header and row names:
+
+```{r load_data, echo=FALSE}
+
+rawData = read.csv(file = "/home/xuepeng/data/DoH/demographic/demo.csv",header = T)
+disease = read.csv(file = "/home/xuepeng/data/DoH/demographic_TopDisease/topDisease.csv",header = T)
+raw_disease = merge(rawData,disease,by = "subject_id", all.x = T)
+
+demo = raw_disease[,c(4,6,8,10,14,15,16,17,18)]
+row.names(demo) = raw_disease$subject_id
+demo[,7] = sub(" days", "", demo[,7])
+demo[,7] = sub(" day", "", demo[,7])
+demo[,7] = as.integer(sub("00:00:00", "1", demo[,7]))
+demo[,7] = as.integer(demo[,7])
+demo[,3][is.na(demo[,3])] = 0
+demo[,5] = sub("M", "1", demo[,5])
+demo[,5] = sub("F", "0", demo[,5])
+
+demo[,6] = sub("Y", "1", demo[,6])
+demo[,6] = sub("N", "0", demo[,6])
+demo[,1] = as.factor(demo[,1])
+demo[,2] = as.factor(demo[,2])
+demo[,3] = as.factor(demo[,3])
+demo[,4] = as.factor(demo[,4])
+demo[,5] = as.factor(demo[,5])
+demo[,6] = as.factor(demo[,6])
+demo[,9] = as.factor(demo[,9])
+
+
+```
+
+```{r scale_data, echo=FALSE}
+demo_scaled=apply(demo[,c(7,8)],2, function(r) {res=(r-min(r))/(max(r)-min(r)); res})
+demo[,c(7,8)] = demo_scaled
+```
+
+
+```{r Distance_Matrix, echo=FALSE}
+dist = daisy(demo,metric = "gower")
+hist(dist)
+
+```
+
+Kmeans is not suitable for this scenario because some variables in dataset are categorical.
+Hierarchical and medoid Clusterings are chosen to calculate the data relationship.
+
+
+```{r Clustering, echo = FALSE}
+filePath = "/home/xuepeng/data/DoH/demographic_TopDisease/"
+
+hc = hclust(dist,method = "ward.D")
+plot(hc)
+
+mydb = dbConnect(MySQL(), user='root', password='passwd', dbname='doh', host='qcis4')
+
+for(i in 16:20){
+  
+  hc_clusters = cutree(hc,i)
+  data_hc = cbind(raw_disease,hc_clusters)
+  
+  pam_dedoid = pam(dist,i,diss = TRUE)
+  plot(pam_dedoid)
+  medoid_clusters = pam_dedoid$clustering
+  
+  table(hc_clusters)
+  table(medoid_clusters)
+  
+  data_hc = cbind(data_hc, medoid_clusters)
+  
+  fileName = paste("cluster_",i, sep = "")
+  write.csv(data_hc,file = paste(filePath,fileName,".csv", sep = ""))
+  dbWriteTable(mydb, name=fileName, value=data_hc)
+}
+```
+
